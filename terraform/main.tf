@@ -52,6 +52,26 @@ resource "aws_security_group" "bastion_sg" {
   }
 
   ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+
+  ingress {
     from_port   = 9100
     to_port     = 9100
     protocol    = "tcp"
@@ -121,15 +141,66 @@ resource "aws_instance" "bastion" {
   }
 }
 
-# 6 private EC2 instances - live in private subnet
-resource "aws_instance" "private" {
-  count                  = 6
-  ami                    = var.ami_id
-  instance_type          = var.instance_type
-  subnet_id              = module.vpc.private_subnets[0]
-  vpc_security_group_ids = [aws_security_group.private_sg.id]
+# 3 Ubuntu instances
+resource "aws_instance" "ubuntu" {
+  count                       = 3
+  ami                         = var.ubuntu_ami
+  instance_type               = var.instance_type
+  key_name                    = var.key_name
+  subnet_id                   = module.vpc.public_subnets[0]
+  vpc_security_group_ids      = [aws_security_group.bastion_sg.id]
+  associate_public_ip_address = true
+
+  user_data = <<-USERDATA
+    #!/bin/bash
+    echo "Port 443" >> /etc/ssh/sshd_config
+    systemctl restart sshd
+  USERDATA
 
   tags = {
-    Name = "private-instance-${count.index + 1}"
+    Name = "ubuntu-${count.index + 1}"
+    OS   = "ubuntu"
+  }
+}
+
+# 3 Amazon Linux instances
+resource "aws_instance" "amazon" {
+  count                       = 3
+  ami                         = var.amazon_ami
+  instance_type               = var.instance_type
+  key_name                    = var.key_name
+  subnet_id                   = module.vpc.public_subnets[0]
+  vpc_security_group_ids      = [aws_security_group.bastion_sg.id]
+  associate_public_ip_address = true
+
+  user_data = <<-USERDATA
+    #!/bin/bash
+    echo "Port 443" >> /etc/ssh/sshd_config
+    systemctl restart sshd
+  USERDATA
+
+  tags = {
+    Name = "amazon-${count.index + 1}"
+    OS   = "amazon"
+  }
+}
+
+# Ansible controller
+resource "aws_instance" "ansible_controller" {
+  ami                         = var.ubuntu_ami
+  instance_type               = var.instance_type
+  key_name                    = var.key_name
+  subnet_id                   = module.vpc.public_subnets[0]
+  vpc_security_group_ids      = [aws_security_group.bastion_sg.id]
+  associate_public_ip_address = true
+
+  user_data = <<-USERDATA
+    #!/bin/bash
+    echo "Port 443" >> /etc/ssh/sshd_config
+    systemctl restart sshd
+  USERDATA
+
+  tags = {
+    Name = "ansible-controller"
   }
 }
